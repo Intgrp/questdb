@@ -9570,6 +9570,8 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
             LOG.info().$("searching all split partitions between [table=").$(tableToken)
                     .$(", partitionIndexLo=").$(partitionIndexLo)
                     .$(", partitionIndexHi=").$(partitionIndexHi)
+                    .$(", timestampMax=").$ts(timestampMax)
+                    .$(", partitionCount=").$(txWriter.getPartitionCount())
                     .$(", logicalPartitionTimestamp=").$ts(logicalPartitionTimestamp)
                     .I$();
 
