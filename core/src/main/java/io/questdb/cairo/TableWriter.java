@@ -9561,19 +9561,31 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
         LOG.info().$("searching all split partitions between [table=").$(tableToken)
                 .$(", partitionIndexLo=").$(partitionIndexLo)
                 .$(", logicalPartitionTimestamp=").$ts(logicalPartitionTimestamp)
-                .$(", partitions=").$(txWriter.toString())
                 .I$();
 
         if (partitionIndexLo + 1 < txWriter.getPartitionCount()) {
             int partitionIndexHi = Math.min(squashSplitPartitions_findPartitionIndexAtOrGreaterTimestamp(timestampMax) + 1, txWriter.getPartitionCount());
             int partitionIndex = partitionIndexLo + 1;
 
+            LOG.info().$("searching all split partitions between [table=").$(tableToken)
+                    .$(", partitionIndexLo=").$(partitionIndexLo)
+                    .$(", partitionIndexHi=").$(partitionIndexHi)
+                    .$(", logicalPartitionTimestamp=").$ts(logicalPartitionTimestamp)
+                    .I$();
+
             for (; partitionIndex < partitionIndexHi; partitionIndex++) {
 
                 long nextPartitionTimestamp = txWriter.getPartitionTimestampByIndex(partitionIndex);
                 long nextPartitionLogicalTimestamp = txWriter.getLogicalPartitionTimestamp(nextPartitionTimestamp);
 
-                if (nextPartitionLogicalTimestamp > logicalPartitionTimestamp) {
+                LOG.info().$("checking split partition [table=").$(tableToken)
+                        .$(", partitionIndex=").$(partitionIndex)
+                        .$(", nextPartitionTimestamp=").$ts(nextPartitionTimestamp)
+                        .$(", nextPartitionLogicalTimestamp=").$ts(nextPartitionLogicalTimestamp)
+                        .$(", logicalPartitionTimestamp=").$ts(logicalPartitionTimestamp)
+                        .I$();
+
+                if (nextPartitionLogicalTimestamp != logicalPartitionTimestamp) {
                     if (partitionIndex - partitionIndexLo > 1) {
                         LOG.info().$("squashing split partitions [table=").$(tableToken)
                                 .$("], partitionIndexLo=").$(partitionIndexLo)
@@ -9586,7 +9598,16 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
                         partitionIndexLo = partitionIndex = squashSplitPartitions_findPartitionIndexAtOrGreaterTimestamp(nextPartitionTimestamp);
                         partitionIndexHi = Math.min(squashSplitPartitions_findPartitionIndexAtOrGreaterTimestamp(timestampMax) + 1, txWriter.getPartitionCount());
                     } else {
+                        LOG.info().$("no split partitions found for logical partitions, rolling [table=").$(tableToken)
+                                .$(", partitionIndexLo=").$(partitionIndexLo)
+                                .$(", partitionIndex=").$(partitionIndex)
+                                .$(", nextPartitionTimestamp=").$ts(nextPartitionTimestamp)
+                                .$(", nextPartitionLogicalTimestamp=").$ts(nextPartitionLogicalTimestamp)
+                                .$(", logicalPartitionTimestamp=").$ts(logicalPartitionTimestamp)
+                                .I$();
+
                         partitionIndexLo = partitionIndex;
+                        logicalPartitionTimestamp = nextPartitionLogicalTimestamp;
                     }
                 }
             }
