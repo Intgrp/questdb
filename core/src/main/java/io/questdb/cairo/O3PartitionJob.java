@@ -999,6 +999,9 @@ public class O3PartitionJob extends AbstractQueueConsumerJob<O3PartitionTask> {
                         prefixType == O3_BLOCK_DATA
                                 && (mergeType == O3_BLOCK_MERGE || mergeType == O3_BLOCK_O3)
                                 && prefixHi >= tableWriter.getPartitionO3SplitThreshold()
+                                // We save on not-rewriting prefix but we pay the price to write the merge and suffix twice.
+                                // first time into the split and second time while squashing it back into the partition
+                                // Check that the prefix is big enough relativly to the split.
                                 && prefixHi > 2 * (mergeDataHi - mergeDataLo + suffixHi - suffixLo + mergeO3Hi - mergeO3Lo)
                 ) {
                     // large prefix copy, better to split the partition

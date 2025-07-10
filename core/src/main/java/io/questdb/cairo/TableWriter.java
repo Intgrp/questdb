@@ -3726,15 +3726,15 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
         long toTxn = txWriter.getTxn();
         if (partitionIndex + 1 < txWriter.getPartitionCount()) {
             // If the next partition is a split partition part of same logical partition
-            // for example if the partition is '2020-01-01' and the next partition is '2020-01-01T12.3'
-            // then if there are no readers between transaction range [0, 3) the partition is unlocked to append.
+            // for example if the partition is '2020-01-01.1' and the next partition is '2020-01-01T12.3'
+            // then if there are no readers between transaction range [2, 3] the partition is unlocked to append.
             if (txWriter.getLogicalPartitionTimestamp(txWriter.getPartitionTimestampByIndex(partitionIndex)) ==
                     txWriter.getLogicalPartitionTimestamp(txWriter.getPartitionTimestampByIndex(partitionIndex + 1))) {
                 toTxn = Math.max(fromTxn + 1, getPartitionNameTxn(partitionIndex + 1) + 1);
             }
         }
 
-        return txnScoreboard.isRangeAvailable(fromTxn, toTxn);
+        return txnScoreboard.isRangeAvailable(fromTxn + 1, toTxn);
     }
 
     private void cancelRowAndBump() {
@@ -9543,6 +9543,10 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
     }
 
     private void squashSplitPartitions(long timestampMin, long timestampMax, int maxLastSubPartitionCount) {
+        LOG.info().$("squashing split partitions [table=").$safe(tableToken.getTableName())
+                .$("], timestampMin=").$ts(timestampMin)
+                .$(", timestampMax=").$ts(timestampMax).I$();
+
         if (timestampMin > txWriter.getMaxTimestamp() || txWriter.getPartitionCount() < 2) {
             return;
         }
@@ -9553,7 +9557,7 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
         long logicalPartitionTimestamp = txWriter.getLogicalPartitionTimestamp(timestampMin);
         int partitionIndexLo = squashSplitPartitions_findPartitionIndexAtOrGreaterTimestamp(logicalPartitionTimestamp);
 
-        if (partitionIndexLo < txWriter.getPartitionCount()) {
+        if (partitionIndexLo + 1 < txWriter.getPartitionCount()) {
             int partitionIndexHi = Math.min(squashSplitPartitions_findPartitionIndexAtOrGreaterTimestamp(timestampMax) + 1, txWriter.getPartitionCount());
             int partitionIndex = partitionIndexLo + 1;
 
@@ -9564,6 +9568,10 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
 
                 if (nextPartitionLogicalTimestamp > logicalPartitionTimestamp) {
                     if (partitionIndex - partitionIndexLo > 1) {
+                        LOG.info().$("squashing split partitions [table=").$safe(tableToken.getTableName())
+                                .$("], partitionIndexLo=").$(partitionIndexLo)
+                                .$(", partitionIndex=").$(partitionIndex).I$();
+
                         squashPartitionRange(maxLastSubPartitionCount, partitionIndexLo, partitionIndex);
                         logicalPartitionTimestamp = nextPartitionTimestamp;
 
@@ -9577,6 +9585,10 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
             }
 
             if (partitionIndex - partitionIndexLo > 1) {
+                LOG.info().$("squashing split partitions [table=").$safe(tableToken.getTableName())
+                        .$("], partitionIndexLo=").$(partitionIndexLo)
+                        .$(", partitionIndex=").$(partitionIndex).I$();
+
                 squashPartitionRange(maxLastSubPartitionCount, partitionIndexLo, partitionIndex);
             }
         }
@@ -9610,6 +9622,9 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
             }
         }
         if (targetPartition == Long.MIN_VALUE) {
+            LOG.info().$("cannot squash partitions [table=").$safe(tableToken.getTableName())
+                    .$("], no unlocked partitions in range [partitionIndexLo=").$(partitionIndexLo)
+                    .$(", partitionIndexHi=").$(partitionIndexHi).I$();
             return;
         }
 

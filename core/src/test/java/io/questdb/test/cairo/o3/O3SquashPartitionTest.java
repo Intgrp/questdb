@@ -32,6 +32,7 @@ import io.questdb.cairo.TableWriter;
 import io.questdb.cairo.sql.RecordCursor;
 import io.questdb.cairo.sql.RecordCursorFactory;
 import io.questdb.std.FilesFacade;
+import io.questdb.std.Misc;
 import io.questdb.std.datetime.microtime.TimestampFormatUtils;
 import io.questdb.test.AbstractCairoTest;
 import io.questdb.test.cairo.Overrides;
@@ -174,7 +175,6 @@ public class O3SquashPartitionTest extends AbstractCairoTest {
             rowCount = assertRowCount(319, rowCount);
 
             // Partition "2020-02-04" squashed the new update
-
             try (TableReader ignore = getReader("x")) {
                 execute(sqlPrefix +
                                 " timestamp_sequence('2020-02-04T18:01', 60*1000000L) ts" +
@@ -185,13 +185,12 @@ public class O3SquashPartitionTest extends AbstractCairoTest {
                 // Partition "2020-02-04" cannot be squashed with the new update because it's locked by the reader
                 assertSql("minTimestamp\tnumRows\tname\n" +
                         "2020-02-04T00:00:00.000000Z\t1081\t2020-02-04\n" +
-                        "2020-02-04T18:01:00.000000Z\t170\t2020-02-04T180000-000001\n" +
-                        "2020-02-04T20:01:00.000000Z\t319\t2020-02-04T200000-000001\n", partitionsSql);
+                        "2020-02-04T18:01:00.000000Z\t489\t2020-02-04T180000-000001\n", partitionsSql);
 
-                rowCount = assertRowCount(170, rowCount);
+                rowCount = assertRowCount(489, rowCount);
             }
 
-            // should squash partitions into 2 pieces
+            // should squash partitions
             execute(sqlPrefix +
                             " timestamp_sequence('2020-02-04T18:01', 1000000L) ts" +
                             " from long_sequence(50)",
@@ -199,10 +198,10 @@ public class O3SquashPartitionTest extends AbstractCairoTest {
             );
 
             assertSql("minTimestamp\tnumRows\tname\n" +
-                    "2020-02-04T00:00:00.000000Z\t1301\t2020-02-04\n" +
-                    "2020-02-04T20:01:00.000000Z\t319\t2020-02-04T200000-000001\n", partitionsSql);
+                    "2020-02-04T00:00:00.000000Z\t1081\t2020-02-04\n" +
+                    "2020-02-04T18:01:00.000000Z\t539\t2020-02-04T180000-000001\n", partitionsSql);
 
-            rowCount = assertRowCount((170 + 50) * 2, rowCount);
+            rowCount = assertRowCount(539, rowCount);
 
 
             execute(sqlPrefix +
@@ -212,11 +211,10 @@ public class O3SquashPartitionTest extends AbstractCairoTest {
             );
 
             assertSql("minTimestamp\tnumRows\tname\n" +
-                    "2020-02-04T00:00:00.000000Z\t1301\t2020-02-04\n" +
-                    "2020-02-04T20:01:00.000000Z\t369\t2020-02-04T200000-000001\n", partitionsSql);
+                    "2020-02-04T00:00:00.000000Z\t1081\t2020-02-04\n" +
+                    "2020-02-04T18:01:00.000000Z\t589\t2020-02-04T180000-000001\n", partitionsSql);
 
-            int delta = 50;
-            rowCount = assertRowCount(delta, rowCount);
+            rowCount = assertRowCount(50, rowCount);
 
             // commit in order rolls to the next partition, should squash partition "2020-02-04" to single part
             execute(sqlPrefix +
@@ -229,8 +227,7 @@ public class O3SquashPartitionTest extends AbstractCairoTest {
                     "2020-02-04T00:00:00.000000Z\t1670\t2020-02-04\n" +
                     "2020-02-05T01:01:15.000000Z\t50\t2020-02-05\n", partitionsSql);
 
-            delta = 369 + 50;
-            assertRowCount(delta, rowCount);
+            assertRowCount(589 + 50, rowCount);
         });
     }
 
@@ -515,6 +512,101 @@ public class O3SquashPartitionTest extends AbstractCairoTest {
             );
             TestUtils.assertSqlCursors(engine, sqlExecutionContext, "y where sym = '5' order by ts", "x where sym = '5'", LOG);
             TestUtils.assertIndexBlockCapacity(engine, "x", "sym");
+        });
+    }
+
+    @Test
+    public void testSplitMidPartitionDelayedSquashOpenReader() throws Exception {
+        Assume.assumeTrue(engine.getConfiguration().isWriterMixedIOEnabled());
+
+        assertMemoryLeak(() -> {
+            // 4kb prefix split threshold
+            node1.setProperty(PropertyKey.CAIRO_O3_PARTITION_SPLIT_MIN_SIZE, 1);
+            node1.setProperty(PropertyKey.CAIRO_O3_LAST_PARTITION_MAX_SPLITS, 2);
+            engine.resetFrameFactory();
+
+            execute(
+                    "create table x as (" +
+                            "select" +
+                            " cast(x as int) i," +
+                            " -x j," +
+                            " rnd_str(5,16,2) as str," +
+                            " rnd_varchar(1,40,5) as varc1," +
+                            " rnd_varchar(1, 1,5) as varc2," +
+                            " rnd_double_array(1,1) arr," +
+                            " timestamp_sequence('2020-02-04T00', 60*1000000L) ts" +
+                            " from long_sequence(60*36)" +
+                            ") timestamp (ts) partition by DAY"
+            );
+
+            execute("alter table x add column k int");
+
+            String sqlPrefix = "insert into x " +
+                    "select" +
+                    " cast(x as int) * 1000000 i," +
+                    " -x - 1000000L as j," +
+                    " rnd_str(5,16,2) as str," +
+                    " rnd_varchar(1,40,5) as varc1," +
+                    " rnd_varchar(1, 1,5) as varc2," +
+                    " rnd_double_array(1,1) arr,";
+
+            TableReader rdrBeforeSplit1 = null, rdrBeforeSplit2 = null;
+
+            try {
+                rdrBeforeSplit1 = getReader("x");
+                // fail squashing fix len column.
+                execute(
+                        sqlPrefix +
+                                " timestamp_sequence('2020-02-04T20:01', 1000000L) ts," +
+                                " x + 2 as k" +
+                                " from long_sequence(200)"
+                );
+
+                String partitionsSql = "select minTimestamp, numRows, name from table_partitions('x')";
+                assertSql("minTimestamp\tnumRows\tname\n" +
+                                "2020-02-04T00:00:00.000000Z\t1201\t2020-02-04\n" +
+                                "2020-02-04T20:01:00.000000Z\t439\t2020-02-04T200000-000001\n" +
+                                "2020-02-05T00:00:00.000000Z\t720\t2020-02-05\n",
+                        partitionsSql
+                );
+
+                rdrBeforeSplit2 = getReader("x");
+                execute(
+                        sqlPrefix +
+                                " timestamp_sequence('2020-02-04T22:20:10', 1000000L) ts," +
+                                " x + 2 as k" +
+                                " from long_sequence(50)"
+                );
+
+                assertSql("minTimestamp\tnumRows\tname\n" +
+                                "2020-02-04T00:00:00.000000Z\t1201\t2020-02-04\n" +
+                                "2020-02-04T20:01:00.000000Z\t340\t2020-02-04T200000-000001\n" +
+                                "2020-02-04T22:20:10.000000Z\t149\t2020-02-04T222000-000001\n" +
+                                "2020-02-05T00:00:00.000000Z\t720\t2020-02-05\n",
+                        partitionsSql
+                );
+
+                rdrBeforeSplit2 = Misc.free(rdrBeforeSplit2);
+                // First split should be swashed on next commit now, even if the commit is to another partition
+                execute(
+                        sqlPrefix +
+                                " timestamp_sequence('2020-02-03T22:20:10', 1000000L) ts," +
+                                " x + 2 as k" +
+                                " from long_sequence(50)"
+                );
+
+
+                assertSql("minTimestamp\tnumRows\tname\n" +
+                                "2020-02-03T22:20:10.000000Z\t50\t2020-02-03\n" +
+                                "2020-02-04T00:00:00.000000Z\t1201\t2020-02-04\n" +
+                                "2020-02-04T20:01:00.000000Z\t489\t2020-02-04T200000-000001\n" +
+                                "2020-02-05T00:00:00.000000Z\t720\t2020-02-05\n",
+                        partitionsSql
+                );
+            } finally {
+                Misc.free(rdrBeforeSplit1);
+                Misc.free(rdrBeforeSplit2);
+            }
         });
     }
 
