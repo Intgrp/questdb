@@ -9558,13 +9558,15 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
         long logicalPartitionTimestamp = txWriter.getLogicalPartitionTimestamp(timestampMin);
         int partitionIndexLo = squashSplitPartitions_findPartitionIndexAtOrGreaterTimestamp(logicalPartitionTimestamp);
 
+        LOG.info().$("searching all split partitions between [table=").$(tableToken)
+                .$(", partitionIndexLo=").$(partitionIndexLo)
+                .$(", logicalPartitionTimestamp=").$ts(logicalPartitionTimestamp)
+                .$(", partitions=").$(txWriter.toString())
+                .I$();
+
         if (partitionIndexLo + 1 < txWriter.getPartitionCount()) {
             int partitionIndexHi = Math.min(squashSplitPartitions_findPartitionIndexAtOrGreaterTimestamp(timestampMax) + 1, txWriter.getPartitionCount());
             int partitionIndex = partitionIndexLo + 1;
-
-            LOG.info().$("searching all split partitions between [table=").$(tableToken)
-                    .$("], partitionIndexLo=").$(partitionIndexLo)
-                    .$(", partitionIndex=").$(partitionIndex).I$();
 
             for (; partitionIndex < partitionIndexHi; partitionIndex++) {
 
