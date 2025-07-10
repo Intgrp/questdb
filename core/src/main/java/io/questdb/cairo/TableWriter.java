@@ -9543,11 +9543,12 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
     }
 
     private void squashSplitPartitions(long timestampMin, long timestampMax, int maxLastSubPartitionCount) {
-        LOG.info().$("squashing split partitions [table=").$safe(tableToken.getTableName())
+        LOG.info().$("squashing split partitions [table=").$(tableToken)
                 .$("], timestampMin=").$ts(timestampMin)
                 .$(", timestampMax=").$ts(timestampMax).I$();
 
         if (timestampMin > txWriter.getMaxTimestamp() || txWriter.getPartitionCount() < 2) {
+            LOG.info().$("squashing split partitions ended early 1 [table=").$(tableToken).$(", partitions=").$(txWriter.toString()).I$();
             return;
         }
 
@@ -9561,6 +9562,10 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
             int partitionIndexHi = Math.min(squashSplitPartitions_findPartitionIndexAtOrGreaterTimestamp(timestampMax) + 1, txWriter.getPartitionCount());
             int partitionIndex = partitionIndexLo + 1;
 
+            LOG.info().$("searching all split partitions between [table=").$(tableToken)
+                    .$("], partitionIndexLo=").$(partitionIndexLo)
+                    .$(", partitionIndex=").$(partitionIndex).I$();
+
             for (; partitionIndex < partitionIndexHi; partitionIndex++) {
 
                 long nextPartitionTimestamp = txWriter.getPartitionTimestampByIndex(partitionIndex);
@@ -9568,7 +9573,7 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
 
                 if (nextPartitionLogicalTimestamp > logicalPartitionTimestamp) {
                     if (partitionIndex - partitionIndexLo > 1) {
-                        LOG.info().$("squashing split partitions [table=").$safe(tableToken.getTableName())
+                        LOG.info().$("squashing split partitions [table=").$(tableToken)
                                 .$("], partitionIndexLo=").$(partitionIndexLo)
                                 .$(", partitionIndex=").$(partitionIndex).I$();
 
@@ -9585,12 +9590,16 @@ public class TableWriter implements TableWriterAPI, MetadataService, Closeable {
             }
 
             if (partitionIndex - partitionIndexLo > 1) {
-                LOG.info().$("squashing split partitions [table=").$safe(tableToken.getTableName())
+                LOG.info().$("squashing split partitions [table=").$(tableToken)
                         .$("], partitionIndexLo=").$(partitionIndexLo)
                         .$(", partitionIndex=").$(partitionIndex).I$();
 
                 squashPartitionRange(maxLastSubPartitionCount, partitionIndexLo, partitionIndex);
             }
+        } else {
+            LOG.info().$("squashing split partitions ended early 2 [table=").$(tableToken)
+                    .$(", partitionIndexLo=").$(partitionIndexLo)
+                    .$(", partitions=").$(txWriter.toString()).I$();
         }
     }
 
