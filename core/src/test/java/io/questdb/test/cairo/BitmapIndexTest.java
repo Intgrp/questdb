@@ -70,6 +70,7 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.concurrent.CountDownLatch;
@@ -123,7 +124,7 @@ public class BitmapIndexTest extends AbstractCairoTest {
     public void testAdd() throws Exception {
         TestUtils.assertMemoryLeak(() -> {
             LongList list = new LongList();
-            create(configuration, path.trimTo(plen), "x", 4);
+            create(configuration, path.trimTo(plen), "x", 8);
             try (BitmapIndexWriter writer = new BitmapIndexWriter(configuration, path, "x", COLUMN_NAME_TXN_NONE)) {
                 writer.add(0, 1000);
                 writer.add(256, 1234);
@@ -1023,6 +1024,27 @@ public class BitmapIndexTest extends AbstractCairoTest {
                 Assert.assertEquals(1000, cursor.next());
                 Assert.assertFalse(cursor.hasNext());
             }
+        }
+    }
+
+    @Test
+    @Ignore
+    public void testHugeIndex() {
+        // this is for debugging
+        create(configuration, path.trimTo(plen), "x", 4);
+        try (BitmapIndexWriter writer = new BitmapIndexWriter(configuration, path, "x", COLUMN_NAME_TXN_NONE)) {
+            for (int i = 0; i < 80_000_000; i++) {
+                writer.add(i, i * 4);
+                writer.add(i, i * 4 + 1);
+                writer.add(i, i * 4 + 2);
+                writer.add(i, i * 4 + 3);
+            }
+        }
+
+        try (BitmapIndexReader r = new BitmapIndexBwdReader(configuration, path.trimTo(plen), "x", COLUMN_NAME_TXN_NONE, 0)) {
+            long t = System.nanoTime();
+            r.getCursor(true, 45_889_892, Long.MIN_VALUE, Long.MAX_VALUE);
+            System.out.println(System.nanoTime() - t + "ns");
         }
     }
 
