@@ -22,32 +22,35 @@
  *
  ******************************************************************************/
 
-package io.questdb.griffin.engine.table;
+package io.questdb.griffin.engine.functions.constants;
 
-import io.questdb.cairo.sql.*;
+import io.questdb.cairo.arr.ArrayTypeDriver;
+import io.questdb.cairo.arr.ArrayView;
+import io.questdb.cairo.arr.NoopArrayWriteState;
+import io.questdb.cairo.sql.ArrayFunction;
+import io.questdb.cairo.sql.Record;
 import io.questdb.griffin.PlanSink;
+import io.questdb.std.str.StringSink;
 
-public class BwdPageFrameRowCursorFactory implements RowCursorFactory {
-    private final PageFrameBwdRowCursor cursor = new PageFrameBwdRowCursor();
-
-    @Override
-    public RowCursor getCursor(PageFrame pageFrame, PageFrameMemory pageFrameMemory) {
-        cursor.of(pageFrame);
-        return cursor;
+public final class NullArrayConstant extends ArrayFunction implements ConstantFunction {
+    public NullArrayConstant(int columnType) {
+        try {
+            this.type = columnType;
+        } catch (Throwable th) {
+            close();
+            throw th;
+        }
     }
 
     @Override
-    public boolean isEntity() {
-        return true;
+    public ArrayView getArray(Record rec) {
+        return ArrayConstant.NULL;
     }
 
     @Override
     public void toPlan(PlanSink sink) {
-        if (sink.getOrder() == PartitionFrameCursorFactory.ORDER_ASC) {
-            sink.type("Row forward scan");
-        } else {
-            sink.type("Row backward scan");
-        }
+        StringSink strSink = new StringSink();
+        ArrayTypeDriver.arrayToJson(ArrayConstant.NULL, strSink, NoopArrayWriteState.INSTANCE);
+        sink.val("ARRAY" + strSink);
     }
 }
-

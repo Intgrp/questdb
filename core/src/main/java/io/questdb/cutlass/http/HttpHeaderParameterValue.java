@@ -22,35 +22,25 @@
  *
  ******************************************************************************/
 
-package io.questdb.griffin.engine.table;
+package io.questdb.cutlass.http;
 
-import io.questdb.cairo.sql.PageFrame;
-import io.questdb.cairo.sql.PageFrameMemory;
-import io.questdb.cairo.sql.PartitionFrameCursorFactory;
-import io.questdb.cairo.sql.RowCursor;
-import io.questdb.cairo.sql.RowCursorFactory;
-import io.questdb.griffin.PlanSink;
+import io.questdb.std.str.DirectUtf8String;
 
-public class FwdPageFrameRowCursorFactory implements RowCursorFactory {
-    private final PageFrameFwdRowCursor cursor = new PageFrameFwdRowCursor();
+public class HttpHeaderParameterValue {
+    private long hi;
+    private DirectUtf8String str;
 
-    @Override
-    public RowCursor getCursor(PageFrame pageFrame, PageFrameMemory pageFrameMemory) {
-        cursor.of(pageFrame);
-        return cursor;
+    public HttpHeaderParameterValue of(long hi, DirectUtf8String str) {
+        this.hi = hi;
+        this.str = str;
+        return this;
     }
 
-    @Override
-    public boolean isEntity() {
-        return true;
+    public long getHi() {
+        return hi;
     }
 
-    @Override
-    public void toPlan(PlanSink sink) {
-        if (sink.getOrder() == PartitionFrameCursorFactory.ORDER_DESC) {
-            sink.type("Row backward scan");
-        } else {
-            sink.type("Row forward scan");
-        }
+    public DirectUtf8String getStr() {
+        return str;
     }
 }

@@ -694,14 +694,14 @@ public class ParallelGroupByFuzzTest extends AbstractCairoTest {
     @Test
     public void testParallelGroupByArrayFirst() throws Exception {
         Assume.assumeFalse(convertToParquet);
-
         testParallelGroupByArray(
-                "SELECT first(darr), key FROM tab order by key", "first\tkey\n" +
-                        "[[0.7675673070796104,0.21583224269349388],[0.15786635599554755,NaN]]\tk0\n" +
-                        "[[NaN]]\tk1\n" +
-                        "[[0.299199045961845,0.9344604857394011,0.8423410920883345],[NaN,0.22452340856088226,0.3491070363730514],[0.7611029514995744,0.4217768841969397,NaN]]\tk2\n" +
-                        "[[0.6276954028373309],[0.6778564558839208]]\tk3\n" +
-                        "[[NaN],[NaN],[0.0035983672154330515]]\tk4\n"
+                "SELECT first(darr), key FROM tab order by key",
+                "first\tkey\n" +
+                        "[[null,null,null],[null,0.7883065830055033,null]]\tk0\n" +
+                        "[[null,0.20447441837877756],[null,null]]\tk1\n" +
+                        "[[0.3491070363730514,0.7611029514995744],[0.4217768841969397,null],[0.7261136209823622,0.4224356661645131]]\tk2\n" +
+                        "[[null,0.33608255572515877],[0.690540444367637,null]]\tk3\n" +
+                        "[[null,null],[0.12503042190293423,null]]\tk4\n"
         );
     }
 
@@ -851,8 +851,8 @@ public class ParallelGroupByFuzzTest extends AbstractCairoTest {
                                         "            Frame forward scan on: tango\n",
                                 "select ts, array_sum(array_cum_sum(arr)), sum(a) from tango sample by 1d order by ts, array_sum",
                                 "ts\tarray_sum\tsum\n" +
-                                        "2025-06-26T00:00:00.000000Z\t0.0\t10.0\n" +
                                         "2025-06-26T00:00:00.000000Z\t220.0\t1.0\n" +
+                                        "2025-06-26T00:00:00.000000Z\tnull\t10.0\n" +
                                         "2025-06-27T00:00:00.000000Z\t770.0\t18.0\n" +
                                         "2025-06-27T00:00:00.000000Z\t1320.0\t25.0\n" +
                                         "2025-06-28T00:00:00.000000Z\t770.0\t38.0\n" +
@@ -925,10 +925,10 @@ public class ParallelGroupByFuzzTest extends AbstractCairoTest {
                                 "select ts, sum(array_sum(arr[a::int:a::int + 2])) from tango sample by 1d",
                                 "ts\tsum\n" +
                                         "2025-06-26T00:00:00.000000Z\t3.0\n" +
-                                        "2025-06-27T00:00:00.000000Z\t0.0\n" +
-                                        "2025-06-28T00:00:00.000000Z\t0.0\n" +
-                                        "2025-06-29T00:00:00.000000Z\t0.0\n" +
-                                        "2025-06-30T00:00:00.000000Z\t0.0\n"
+                                        "2025-06-27T00:00:00.000000Z\tnull\n" +
+                                        "2025-06-28T00:00:00.000000Z\tnull\n" +
+                                        "2025-06-29T00:00:00.000000Z\tnull\n" +
+                                        "2025-06-30T00:00:00.000000Z\tnull\n"
                         );
                     },
                     configuration,

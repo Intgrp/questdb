@@ -256,36 +256,40 @@ public class SqlParser {
         return visitor.visit(node);
     }
 
-    public static void validateMatViewDelay(int lengthInterval, char lengthUnit, int delayInterval, char delayUnit, int pos) throws SqlException {
+    public static void validateMatViewDelay(int length, char lengthUnit, int delay, char delayUnit, int pos) throws SqlException {
+        if (delay < 0) {
+            throw SqlException.position(pos).put("delay cannot be negative");
+        }
+
         int lengthMinutes;
         switch (lengthUnit) {
             case 'm':
-                lengthMinutes = lengthInterval;
+                lengthMinutes = length;
                 break;
             case 'h':
-                lengthMinutes = lengthInterval * 60;
+                lengthMinutes = length * 60;
                 break;
             case 'd':
-                lengthMinutes = lengthInterval * 24 * 60;
+                lengthMinutes = length * 24 * 60;
                 break;
             default:
-                throw SqlException.position(pos).put("unsupported length unit: ").put(lengthInterval).put(lengthUnit)
+                throw SqlException.position(pos).put("unsupported length unit: ").put(length).put(lengthUnit)
                         .put(", supported units are 'm', 'h', 'd'");
         }
 
         int delayMinutes;
         switch (delayUnit) {
             case 'm':
-                delayMinutes = delayInterval;
+                delayMinutes = delay;
                 break;
             case 'h':
-                delayMinutes = delayInterval * 60;
+                delayMinutes = delay * 60;
                 break;
             case 'd':
-                delayMinutes = delayInterval * 24 * 60;
+                delayMinutes = delay * 24 * 60;
                 break;
             default:
-                throw SqlException.position(pos).put("unsupported delay unit: ").put(delayInterval).put(delayUnit)
+                throw SqlException.position(pos).put("unsupported delay unit: ").put(delay).put(delayUnit)
                         .put(", supported units are 'm', 'h', 'd'");
         }
 
@@ -412,66 +416,6 @@ public class SqlParser {
     ) throws SqlException {
         CharSequence nextToken = (tok == null || Chars.equals(tok, ';')) ? null : tok;
         return sqlParserCallback.parseCreateTableExt(lexer, executionContext.getSecurityContext(), builder, nextToken);
-    }
-
-    private static void validateMatViewQuery(QueryModel model, String baseTableName) throws SqlException {
-        for (QueryModel m = model; m != null; m = m.getNestedModel()) {
-            tableNames.clear();
-            tableNamePositions.clear();
-            collectAllTableNames(m, tableNames, null);
-            final boolean baseTableQueried = tableNames.contains(baseTableName);
-            final int queriedTableCount = tableNames.size();
-            if (baseTableQueried) {
-                if (m.getSampleBy() != null && m.getSampleByOffset() == null) {
-                    throw SqlException.position(m.getSampleBy().position + m.getSampleBy().token.length() + 1)
-                            .put("ALIGN TO FIRST OBSERVATION on base table is not supported for materialized views: ").put(baseTableName);
-                }
-
-                if ((m.getSampleByFrom() != null || m.getSampleByTo() != null)) {
-                    final int position = m.getSampleByFrom() != null ? m.getSampleByFrom().position : m.getSampleByTo().position;
-                    throw SqlException.position(position)
-                            .put("FROM-TO on base table is not supported for materialized views: ").put(baseTableName);
-                }
-
-                final ObjList<ExpressionNode> sampleByFill = m.getSampleByFill();
-                if (sampleByFill != null && sampleByFill.size() > 0) {
-                    throw SqlException.position(sampleByFill.get(0).position)
-                            .put("FILL on base table is not supported for materialized views: ").put(baseTableName);
-                }
-
-                ObjList<QueryColumn> columns = m.getColumns();
-                QueryColumn windowFuncColumn = null;
-                for (int i = 0, n = columns.size(); i < n; i++) {
-                    QueryColumn column = columns.getQuick(i);
-                    if (column.isWindowColumn()) {
-                        windowFuncColumn = column;
-                    }
-                }
-                if (windowFuncColumn != null) {
-                    throw SqlException.position(windowFuncColumn.getAst().position)
-                            .put("window function on base table is not supported for materialized views: ").put(baseTableName);
-                }
-            }
-
-            final ObjList<QueryModel> joinModels = m.getJoinModels();
-            for (int i = 0, n = joinModels.size(); i < n; i++) {
-                final QueryModel joinModel = joinModels.getQuick(i);
-                if (joinModel == m) {
-                    continue;
-                }
-                validateMatViewQuery(joinModel, baseTableName);
-            }
-
-            final QueryModel unionModel = m.getUnionModel();
-            if (unionModel != null) {
-                // allow self-UNION on base table, but disallow UNION on base table with any other tables
-                if (baseTableQueried && queriedTableCount > 1) {
-                    throw SqlException.position(m.getUnionModel().getModelPosition())
-                            .put("union on base table is not supported for materialized views: ").put(baseTableName);
-                }
-                validateMatViewQuery(unionModel, baseTableName);
-            }
-        }
     }
 
     private static void validateShowTransactions(GenericLexer lexer) throws SqlException {
@@ -697,6 +641,38 @@ public class SqlParser {
             return;
         }
         throw SqlException.$((lexer.lastTokenPosition()), "'zone' expected");
+    }
+
+    private void generateColumnAlias(GenericLexer lexer, QueryColumn qc, boolean hasFrom) throws SqlException {
+        CharSequence token = qc.getAst().token;
+        if (qc.getAst().isWildcard() && !hasFrom) {
+            throw err(lexer, null, "'from' expected");
+        }
+
+        CharSequence alias;
+        if (configuration.isColumnAliasExpressionEnabled()) {
+            CharacterStoreEntry entry = characterStore.newEntry();
+            qc.getAst().toSink(entry);
+            alias = SqlUtil.createExprColumnAlias(
+                    characterStore,
+                    entry.toImmutable(),
+                    aliasMap,
+                    configuration.getColumnAliasGeneratedMaxSize(),
+                    qc.getAst().type != ExpressionNode.LITERAL
+            );
+        } else {
+            if (qc.getAst().type == ExpressionNode.CONSTANT && Chars.indexOfLastUnquoted(token, '.') != -1) {
+                alias = createConstColumnAlias(aliasMap);
+            } else {
+                CharSequence tokenAlias = qc.getAst().token;
+                if (qc.isWindowColumn() && ((WindowColumn) qc).isIgnoreNulls()) {
+                    tokenAlias += "_ignore_nulls";
+                }
+                alias = createColumnAlias(tokenAlias, qc.getAst().type, aliasMap);
+            }
+        }
+        qc.setAlias(alias, QueryColumn.SYNTHESIZED_ALIAS_POSITION);
+        aliasMap.put(alias, qc);
     }
 
     private @Nullable CreateTableColumnModel getCreateTableColumnModel(CharSequence columnName) {
@@ -949,7 +925,7 @@ public class SqlParser {
         boolean deferred = false;
         if (isRefreshKeyword(tok)) {
             refreshDefined = true;
-            tok = tok(lexer, "'immediate' or 'manual' or 'period' or 'start' or 'every' or 'as'");
+            tok = tok(lexer, "'immediate' or 'manual' or 'period' or 'every' or 'as'");
             int every = 0;
             char everyUnit = 0;
             // 'incremental' is obsolete, replaced with 'immediate'
@@ -958,14 +934,11 @@ public class SqlParser {
             } else if (isImmediateKeyword(tok)) {
                 tok = tok(lexer, "'deferred' or 'period' or 'as'");
             } else if (isManualKeyword(tok)) {
-                if (!configuration.isMatViewDebugEnabled()) {
-                    throw SqlException.position(lexer.lastTokenPosition()).put("manual refresh is in beta and disabled by default");
-                }
                 refreshType = MatViewDefinition.REFRESH_TYPE_MANUAL;
                 tok = tok(lexer, "'deferred' or 'period' or 'as'");
             } else if (isEveryKeyword(tok)) {
                 tok = tok(lexer, "interval");
-                every = Timestamps.getStrideMultiple(tok);
+                every = Timestamps.getStrideMultiple(tok, lexer.lastTokenPosition());
                 everyUnit = Timestamps.getStrideUnit(tok, lexer.lastTokenPosition());
                 validateMatViewEveryUnit(everyUnit, lexer.lastTokenPosition());
                 refreshType = MatViewDefinition.REFRESH_TYPE_TIMER;
@@ -982,11 +955,11 @@ public class SqlParser {
             }
 
             if (isPeriodKeyword(tok)) {
-                // REFRESH [IMMEDIATE | MANUAL | EVERY <interval>] PERIOD(LENGTH <interval> [TIME ZONE '<timezone>'] [DELAY <interval>])
+                // REFRESH ... PERIOD(LENGTH <interval> [TIME ZONE '<timezone>'] [DELAY <interval>])
                 expectTok(lexer, "(");
                 expectTok(lexer, "length");
                 tok = tok(lexer, "LENGTH interval");
-                final int length = Timestamps.getStrideMultiple(tok);
+                final int length = Timestamps.getStrideMultiple(tok, lexer.lastTokenPosition());
                 final char lengthUnit = Timestamps.getStrideUnit(tok, lexer.lastTokenPosition());
                 validateMatViewLength(length, lengthUnit, lexer.lastTokenPosition());
                 final TimestampSampler periodSampler = TimestampSamplerFactory.getInstance(length, lengthUnit, lexer.lastTokenPosition());
@@ -1013,7 +986,7 @@ public class SqlParser {
                 char delayUnit = 0;
                 if (isDelayKeyword(tok)) {
                     tok = tok(lexer, "DELAY interval");
-                    delay = Timestamps.getStrideMultiple(tok);
+                    delay = Timestamps.getStrideMultiple(tok, lexer.lastTokenPosition());
                     delayUnit = Timestamps.getStrideUnit(tok, lexer.lastTokenPosition());
                     validateMatViewDelay(length, lengthUnit, delay, delayUnit, lexer.lastTokenPosition());
                     tok = tok(lexer, "')'");
@@ -1038,7 +1011,7 @@ public class SqlParser {
                 }
                 // Use the current time as the start timestamp if it wasn't specified.
                 long start = configuration.getMicrosecondClock().getTicks();
-                String timeZone = null;
+                String tz = null;
                 if (isStartKeyword(tok)) {
                     tok = tok(lexer, "START timestamp");
                     try {
@@ -1051,11 +1024,11 @@ public class SqlParser {
                     if (isTimeKeyword(tok)) {
                         expectTok(lexer, "zone");
                         tok = tok(lexer, "TIME ZONE name");
-                        timeZone = unquote(tok).toString();
+                        tz = unquote(tok).toString();
                         tok = tok(lexer, "'as'");
                     }
                 }
-                mvOpBuilder.setTimer(timeZone, start, every, everyUnit);
+                mvOpBuilder.setTimer(tz, start, every, everyUnit);
             } else if (refreshType == MatViewDefinition.REFRESH_TYPE_TIMER) {
                 // REFRESH EVERY <interval> AS
                 // Don't forget to set timer params.
@@ -3362,7 +3335,6 @@ public class SqlParser {
                     }
                 }
 
-                final CharSequence alias;
                 tok = optTok(lexer);
 
                 QueryColumn col;
@@ -3517,7 +3489,7 @@ public class SqlParser {
                                     if (framingMode == WindowColumn.FRAMING_RANGE) {
                                         long timeUnit = parseTimeUnit(lexer);
                                         if (timeUnit != -1) {
-                                            winCol.setRowsLoExprTimeUnit(timeUnit, lexer.lastTokenPosition());
+                                            winCol.setRowsLoExprTimeUnit(timeUnit);
                                         }
                                     }
 
@@ -3561,7 +3533,7 @@ public class SqlParser {
                                         if (framingMode == WindowColumn.FRAMING_RANGE) {
                                             long timeUnit = parseTimeUnit(lexer);
                                             if (timeUnit != -1) {
-                                                winCol.setRowsHiExprTimeUnit(timeUnit, lexer.lastTokenPosition());
+                                                winCol.setRowsHiExprTimeUnit(timeUnit);
                                             }
                                         }
 
@@ -3601,7 +3573,7 @@ public class SqlParser {
                                     if (framingMode == WindowColumn.FRAMING_RANGE) {
                                         long timeUnit = parseTimeUnit(lexer);
                                         if (timeUnit != -1) {
-                                            winCol.setRowsLoExprTimeUnit(timeUnit, lexer.lastTokenPosition());
+                                            winCol.setRowsLoExprTimeUnit(timeUnit);
                                         }
                                     }
                                     tok = tok(lexer, "'preceding'");
@@ -3662,6 +3634,8 @@ public class SqlParser {
                     col = queryColumnPool.next().of(null, expr);
                 }
 
+                final CharSequence alias;
+                final int aliasPosition;
                 if (tok != null && columnAliasStop.excludes(tok)) {
                     assertNotDot(lexer, tok);
 
@@ -3672,11 +3646,15 @@ public class SqlParser {
                         assertNameIsQuotedOrNotAKeyword(tok, lexer.lastTokenPosition());
                         CharSequence aliasTok = GenericLexer.immutableOf(tok);
                         validateIdentifier(lexer, aliasTok);
-                        alias = unquote(aliasTok);
+                        boolean unquoting = Chars.indexOf(aliasTok, '.') == -1;
+                        alias = unquoting ? unquote(aliasTok) : aliasTok;
+                        aliasPosition = lexer.lastTokenPosition();
                     } else {
                         validateIdentifier(lexer, tok);
                         assertNameIsQuotedOrNotAKeyword(tok, lexer.lastTokenPosition());
-                        alias = GenericLexer.immutableOf(unquote(tok));
+                        boolean unquoting = Chars.indexOf(tok, '.') == -1;
+                        alias = GenericLexer.immutableOf(unquoting ? unquote(tok) : tok);
+                        aliasPosition = lexer.lastTokenPosition();
                     }
 
                     if (col.getAst().isWildcard()) {
@@ -3687,6 +3665,7 @@ public class SqlParser {
                     aliasMap.put(alias, col);
                 } else {
                     alias = null;
+                    aliasPosition = QueryColumn.SYNTHESIZED_ALIAS_POSITION;
                 }
 
                 // correlated sub-queries do not have expr.token values (they are null)
@@ -3698,7 +3677,7 @@ public class SqlParser {
                     if (alias.length() == 0) {
                         throw err(lexer, null, "column alias cannot be a blank string");
                     }
-                    col.setAlias(alias);
+                    col.setAlias(alias, aliasPosition);
                 }
 
                 accumulatedColumns.add(col);
@@ -3732,23 +3711,7 @@ public class SqlParser {
             for (int i = 0, n = accumulatedColumns.size(); i < n; i++) {
                 QueryColumn qc = accumulatedColumns.getQuick(i);
                 if (qc.getAlias() == null) {
-                    CharSequence token = qc.getAst().token;
-                    if (qc.getAst().isWildcard() && !hasFrom) {
-                        throw err(lexer, null, "'from' expected");
-                    }
-                    CharSequence alias;
-
-                    if (qc.getAst().type == ExpressionNode.CONSTANT && Chars.indexOfLastUnquoted(token, '.') != -1) {
-                        alias = createConstColumnAlias(aliasMap);
-                    } else {
-                        CharSequence tokenAlias = qc.getAst().token;
-                        if (qc.isWindowColumn() && ((WindowColumn) qc).isIgnoreNulls()) {
-                            tokenAlias += "_ignore_nulls";
-                        }
-                        alias = createColumnAlias(tokenAlias, qc.getAst().type, aliasMap);
-                    }
-                    qc.setAlias(alias);
-                    aliasMap.put(alias, qc);
+                    generateColumnAlias(lexer, qc, hasFrom);
                 }
                 model.addBottomUpColumn(accumulatedColumnPositions.getQuick(i), qc, false);
             }
@@ -4381,7 +4344,34 @@ public class SqlParser {
 
     private int toColumnType(GenericLexer lexer, @NotNull CharSequence tok) throws SqlException {
         int typePosition = lexer.lastTokenPosition();
+        if (Chars.equalsNc(tok, '[')) {
+            // '[' is a wierd type name, it could be that someone is either:
+            // 1. array dereferencing [x]
+            // 2. inverting array definition, []type
+            // 3. left out array definition (type), e.g. just []
+            // 4. dangling [, e.g. there is no closing ]
+
+            // we can be brave here, we will error out already, [ is not a type regardless of what we find
+            tok = optTok(lexer);
+            if (tok == null) {
+                throw SqlException.position(typePosition).put("dangling '[' where column type is expected");
+            }
+
+            if (Chars.equals(tok, ']')) {
+                // we have []
+                // lets see if there is a type
+                tok = optTok(lexer);
+                if (tok == null) {
+                    throw SqlException.position(typePosition).put("did you mean 'double[]'?");
+                }
+                if (!Chars.equals(tok, ')') && !Chars.equals(tok, ',') && !Chars.equals(tok, '(')) {
+                    throw SqlException.position(typePosition).put("did you mean '").put(tok).put("[]'?");
+                }
+            }
+            throw SqlException.position(typePosition).put("column type is expected here");
+        }
         final short typeTag = SqlUtil.toPersistedTypeTag(tok, typePosition);
+        final int typeTagPosition = lexer.lastTokenPosition();
 
         // ignore precision keyword for DOUBLE column: 'double precision' is the same type as 'double'
         if (typeTag == ColumnType.DOUBLE) {
@@ -4391,7 +4381,7 @@ public class SqlParser {
             }
         }
 
-        int nDims = SqlUtil.parseArrayDimensionality(lexer);
+        int nDims = SqlUtil.parseArrayDimensionality(lexer, typeTag, typeTagPosition);
         if (nDims > 0) {
             if (!ColumnType.isSupportedArrayElementType(typeTag)) {
                 throw SqlException.position(typePosition)
@@ -4458,6 +4448,80 @@ public class SqlParser {
                     c == '_' ||
                     c == '$')) {
                 throw SqlException.position(lexer.lastTokenPosition()).put("identifier can contain letters, digits, '_' or '$'");
+            }
+        }
+    }
+
+    private void validateMatViewQuery(QueryModel model, String baseTableName) throws SqlException {
+        for (QueryModel m = model; m != null; m = m.getNestedModel()) {
+            tableNames.clear();
+            tableNamePositions.clear();
+            collectAllTableNames(m, tableNames, null);
+            final boolean baseTableQueried = tableNames.contains(baseTableName);
+            final int queriedTableCount = tableNames.size();
+            if (baseTableQueried) {
+                if (m.getSampleBy() != null && m.getSampleByOffset() == null) {
+                    throw SqlException.position(m.getSampleBy().position + m.getSampleBy().token.length() + 1)
+                            .put("ALIGN TO FIRST OBSERVATION on base table is not supported for materialized views: ").put(baseTableName);
+                }
+
+                if ((m.getSampleByFrom() != null || m.getSampleByTo() != null)) {
+                    final int position = m.getSampleByFrom() != null ? m.getSampleByFrom().position : m.getSampleByTo().position;
+                    throw SqlException.position(position)
+                            .put("FROM-TO on base table is not supported for materialized views: ").put(baseTableName);
+                }
+
+                final ObjList<ExpressionNode> sampleByFill = m.getSampleByFill();
+                if (sampleByFill != null && sampleByFill.size() > 0) {
+                    throw SqlException.position(sampleByFill.get(0).position)
+                            .put("FILL on base table is not supported for materialized views: ").put(baseTableName);
+                }
+
+                ObjList<QueryColumn> columns = m.getColumns();
+                QueryColumn windowFuncColumn = null;
+                for (int i = 0, n = columns.size(); i < n; i++) {
+                    QueryColumn column = columns.getQuick(i);
+                    if (column.isWindowColumn()) {
+                        windowFuncColumn = column;
+                    }
+
+                    if (!Chars.equals(column.getName(), '*') && !TableUtils.isValidColumnName(column.getName(), configuration.getMaxFileNameLength())) {
+                        if (column.getAliasPosition() == QueryColumn.SYNTHESIZED_ALIAS_POSITION) {
+                            throw SqlException
+                                    .position(column.getAst().position)
+                                    .put("column '").put(column.getName()).put("' requires an explicit alias. Use: ")
+                                    .put(column.getName()).put(" AS your_column_name");
+                        } else {
+                            throw SqlException
+                                    .position(column.getAliasPosition())
+                                    .put("column alias '").put(column.getName()).put("' contains unsupported characters");
+                        }
+                    }
+                }
+
+                if (windowFuncColumn != null) {
+                    throw SqlException.position(windowFuncColumn.getAst().position)
+                            .put("window function on base table is not supported for materialized views: ").put(baseTableName);
+                }
+            }
+
+            final ObjList<QueryModel> joinModels = m.getJoinModels();
+            for (int i = 0, n = joinModels.size(); i < n; i++) {
+                final QueryModel joinModel = joinModels.getQuick(i);
+                if (joinModel == m) {
+                    continue;
+                }
+                validateMatViewQuery(joinModel, baseTableName);
+            }
+
+            final QueryModel unionModel = m.getUnionModel();
+            if (unionModel != null) {
+                // allow self-UNION on base table, but disallow UNION on base table with any other tables
+                if (baseTableQueried && queriedTableCount > 1) {
+                    throw SqlException.position(m.getUnionModel().getModelPosition())
+                            .put("union on base table is not supported for materialized views: ").put(baseTableName);
+                }
+                validateMatViewQuery(unionModel, baseTableName);
             }
         }
     }
