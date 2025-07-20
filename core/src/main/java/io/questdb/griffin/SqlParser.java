@@ -1086,8 +1086,6 @@ public class SqlParser {
                         .put("base table is not referenced in materialized view query: ").put(baseTableName);
             }
             validateMatViewQuery(queryModel, baseTableNameStr);
-
-            assert queryModel != null;
             final QueryModel nestedModel = queryModel.getNestedModel();
             if (nestedModel != null) {
                 if (nestedModel.getSampleByTimezoneName() != null) {
@@ -2870,7 +2868,7 @@ public class SqlParser {
                 final SqlExecutionContext innerExecutionContext =
                         new SqlExecutionContextImpl(compiler.getEngine(), executionContext != null ? executionContext.getWorkerCount() : 1);
 
-                executionModel = compiler.compileExecutionModel0(innerExecutionContext, executionModel);
+                executionModel = compiler.compileExecutionModel(innerExecutionContext, executionModel);
 
                 /*
                     This query must be re-run, so the final execution plan cannot be cached.
@@ -2894,7 +2892,7 @@ public class SqlParser {
 
                     final TableColumnMetadata columnMetadata = inListMetadata.getColumnMetadata(0);
 
-                    boolean quote = ColumnType.isSymbolOrString(columnMetadata.getColumnType());
+                    boolean quote = ColumnType.isSymbolOrStringOrVarchar(columnMetadata.getColumnType());
 
                     // todo(nwoolmer): support geohash
                     // todo(nwoolmer) support binary (when literal is added)
@@ -3118,8 +3116,10 @@ public class SqlParser {
                 if (col.getAst().isWildcard()) {
                     throw err(lexer, null, "wildcard cannot have alias");
                 }
+
+                col.setAlias(alias, lexer.lastTokenPosition());
                 tok = optTok(lexer);
-                col.setAlias(alias);
+
             }
         }
 

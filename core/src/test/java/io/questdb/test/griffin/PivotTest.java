@@ -1500,11 +1500,22 @@ public class PivotTest extends AbstractSqlParserTest {
             assertException("monthly_sales \n" +
                             "PIVOT (\n" +
                             "  SUM(amount) \n" +
-                            "  FOR MONTH IN ('JAN' AS '1', 'FEB' AS '2', 'MAR' AS '3') ELSE '4' \n" +
+                            "  FOR MONTH IN ('JAN', 'FEB', 'MAR') ELSE 'APR-DEC' \n" +
                             "  ORDER BY EMPID\n" +
                             ");",
-                    117,
-                    "ORDER BY column is not present in select fields [name=EMPID]");
+                    102,
+                    "Invalid ORDER BY column in PIVOT [col=EMPID]");
+
+            assertSql("EMPID\tJAN\tFEB\tMAR\tAPR-DEC\n" +
+                            "1\t10400\t8000\t11000\t18000\n" +
+                            "2\t39500\t90700\t12000\t5300\n",
+                    "monthly_sales \n" +
+                            "PIVOT (\n" +
+                            "  SUM(amount) \n" +
+                            "  FOR MONTH IN ('JAN', 'FEB', 'MAR') ELSE 'APR-DEC' \n" +
+                            "  GROUP BY EMPID\n" +
+                            "  ORDER BY EMPID\n" +
+                            ");");
         });
     }
 

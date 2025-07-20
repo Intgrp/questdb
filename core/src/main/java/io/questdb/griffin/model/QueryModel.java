@@ -156,6 +156,7 @@ public class QueryModel implements Mutable, ExecutionModel, AliasTranslator, Sin
     // Used to store a deep copy of the whereClause field
     // since whereClause can be changed during optimization/generation stage.
     private ExpressionNode backupWhereClause;
+    private boolean cacheable = true;
     // where clause expressions that do not reference any tables, not necessarily constants
     private ExpressionNode constWhereClause;
     private JoinContext context;
@@ -198,7 +199,6 @@ public class QueryModel implements Mutable, ExecutionModel, AliasTranslator, Sin
     private ExpressionNode outerJoinExpressionClause;
     private @Nullable ObjList<QueryColumn> pivotColumns = null;
     private @Nullable ObjList<QueryColumn> pivotFor = null;
-    private boolean cacheable = true;
     private ExpressionNode postJoinWhereClause;
     private ExpressionNode sampleBy;
     private ExpressionNode sampleByFrom;
@@ -372,17 +372,6 @@ public class QueryModel implements Mutable, ExecutionModel, AliasTranslator, Sin
         pivotFor.add(_for);
     }
 
-    public void setCacheable(boolean b) {
-        cacheable = b;
-    }
-
-    public boolean isCacheable() {
-        if (nestedModel != null) {
-            return cacheable && nestedModel.isCacheable();
-        }
-        return cacheable;
-    }
-
     public void addSampleByFill(ExpressionNode sampleByFill) {
         this.sampleByFill.add(sampleByFill);
     }
@@ -533,6 +522,7 @@ public class QueryModel implements Mutable, ExecutionModel, AliasTranslator, Sin
     public void clearPivot() {
         Misc.clear(pivotColumns);
         Misc.clear(pivotFor);
+        cacheable = true;
     }
 
     public void clearSampleBy() {
@@ -1133,6 +1123,13 @@ public class QueryModel implements Mutable, ExecutionModel, AliasTranslator, Sin
         return artificialStar;
     }
 
+    public boolean isCacheable() {
+        if (nestedModel != null) {
+            return cacheable && nestedModel.isCacheable();
+        }
+        return cacheable;
+    }
+
     public boolean isDistinct() {
         return distinct;
     }
@@ -1356,6 +1353,10 @@ public class QueryModel implements Mutable, ExecutionModel, AliasTranslator, Sin
 
     public void setBackupWhereClause(ExpressionNode backupWhereClause) {
         this.backupWhereClause = backupWhereClause;
+    }
+
+    public void setCacheable(boolean b) {
+        cacheable = b;
     }
 
     public void setConstWhereClause(ExpressionNode constWhereClause) {

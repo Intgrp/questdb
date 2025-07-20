@@ -74,8 +74,7 @@ public class CharSequenceIntHashMap extends AbstractCharSequenceHashSet {
     public int incrementAndReturnValue(@NotNull CharSequence key) {
         int index = keyIndex(key);
         if (index < 0) {
-            values[-index - 1] = values[-index - 1] + 1;
-            return values[-index - 1];
+            return ++values[-index - 1];
         } else {
             putAt0(index, Chars.toString(key), 0);
             return 0;

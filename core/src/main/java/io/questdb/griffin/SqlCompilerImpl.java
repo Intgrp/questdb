@@ -2291,7 +2291,7 @@ public class SqlCompilerImpl implements SqlCompiler, Closeable, SqlParserCallbac
     private ExecutionModel compileExecutionModel(SqlExecutionContext executionContext) throws SqlException {
         final ExecutionModel model = parser.parse(lexer, executionContext, this);
         if (model.getModelType() != ExecutionModel.EXPLAIN) {
-            return compileExecutionModel0(executionContext, model);
+            return compileExecutionModel(executionContext, model);
         } else {
             final ExplainModel explainModel = (ExplainModel) model;
             final ExecutionModel innerModel = compileExplainExecutionModel0(executionContext, explainModel.getInnerExecutionModel());
@@ -2320,7 +2320,7 @@ public class SqlCompilerImpl implements SqlCompiler, Closeable, SqlParserCallbac
                 }
                 return model;
         }
-        return compileExecutionModel0(executionContext, model);
+        return compileExecutionModel(executionContext, model);
     }
 
     private void compileInner(
@@ -2664,7 +2664,7 @@ public class SqlCompilerImpl implements SqlCompiler, Closeable, SqlParserCallbac
             final boolean ogAllowNonDeterministic = executionContext.allowNonDeterministicFunctions();
             executionContext.setAllowNonDeterministicFunction(false);
             try {
-                compiledQuery.ofSelect(generateSelectWithRetries(queryModel, null, executionContext, false), true);
+                compiledQuery.ofSelect(generateSelectWithRetries(queryModel, null, executionContext, false), queryModel.isCacheable());
             } catch (SqlException e) {
                 e.setPosition(e.getPosition() + selectTextPosition);
                 throw e;
@@ -3976,7 +3976,7 @@ public class SqlCompilerImpl implements SqlCompiler, Closeable, SqlParserCallbac
         throw SqlException.position(position).put("'table' or 'materialized view' or 'all' expected");
     }
 
-    protected ExecutionModel compileExecutionModel0(SqlExecutionContext executionContext, ExecutionModel model) throws SqlException {
+    protected ExecutionModel compileExecutionModel(SqlExecutionContext executionContext, ExecutionModel model) throws SqlException {
         switch (model.getModelType()) {
             case ExecutionModel.QUERY:
                 return optimiser.optimise((QueryModel) model, executionContext, this);
