@@ -1868,13 +1868,9 @@ public class PGPipelineEntry implements QuietCloseable, Mutable {
 
     private void outColChar(PGResponseSink utf8Sink, Record record, int columnIndex) {
         final char charValue = record.getChar(columnIndex);
-        if (charValue == 0) {
-            utf8Sink.setNullValue();
-        } else {
-            long a = utf8Sink.skipInt();
-            utf8Sink.put(charValue);
-            utf8Sink.putLenEx(a);
-        }
+        long a = utf8Sink.skipInt();
+        utf8Sink.put(charValue);
+        utf8Sink.putLenEx(a);
     }
 
     private void outColInterval(PGResponseSink utf8Sink, Record record, int col) {
