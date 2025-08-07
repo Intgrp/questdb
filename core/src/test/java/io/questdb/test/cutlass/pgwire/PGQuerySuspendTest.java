@@ -147,6 +147,8 @@ public class PGQuerySuspendTest extends BasePGTest {
                 }
 
                 TestUtils.assertEquals(countQuery, countSink, sinkB);
+                // This has the side effect of closing all remembered suspend events
+                testCases.getSuspendingListener();
             }
         });
     }
