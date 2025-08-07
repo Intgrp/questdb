@@ -418,7 +418,6 @@ public class QueryProgress extends AbstractRecordCursorFactory implements Resour
             try {
                 return base.hasNext();
             } catch (DataUnavailableException e) {
-                // this workflow is not yet in production and is incomplete
                 throw e;
             } catch (Throwable e) {
                 close0(e);
