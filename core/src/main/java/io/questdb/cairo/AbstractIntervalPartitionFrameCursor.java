@@ -61,6 +61,7 @@ public abstract class AbstractIntervalPartitionFrameCursor implements PartitionF
     private int initialIntervalsLo;
     private int initialPartitionHi;
     private int initialPartitionLo;
+    private SqlExecutionContext sqlExecutionContext;
 
     public AbstractIntervalPartitionFrameCursor(RuntimeIntrinsicIntervalModel intervalModel, int timestampIndex) {
         assert timestampIndex > -1;
@@ -97,9 +98,14 @@ public abstract class AbstractIntervalPartitionFrameCursor implements PartitionF
     }
 
     public AbstractIntervalPartitionFrameCursor of(TableReader reader, SqlExecutionContext sqlExecutionContext) throws SqlException {
-        this.intervals = intervalModel.calculateIntervals(sqlExecutionContext);
-        calculateRanges(reader, intervals);
         this.reader = reader;
+        this.sqlExecutionContext = sqlExecutionContext;
+        try {
+            this.intervals = intervalModel.calculateIntervals(sqlExecutionContext);
+            calculateRanges(reader, intervals);
+        } catch (DataUnavailableException e) {
+            e.getEvent().close();
+        }
         return this;
     }
 
@@ -279,6 +285,21 @@ public abstract class AbstractIntervalPartitionFrameCursor implements PartitionF
         this.initialPartitionLo = reader.getMinTimestamp() < intervalLo ? reader.getPartitionIndexByTimestamp(intervalLo) : 0;
         long intervalHi = reader.floorToPartitionTimestamp(intervals.getQuick((initialIntervalsHi - 1) * 2 + 1));
         this.initialPartitionHi = Math.min(reader.getPartitionCount(), reader.getPartitionIndexByTimestamp(intervalHi) + 1);
+    }
+
+    protected void ensureIntervalsCalculated() {
+        if (intervals == null) {
+            try {
+                intervals = intervalModel.calculateIntervals(sqlExecutionContext);
+            } catch (SqlException e) {
+                CairoException ce = CairoException.nonCritical().position(e.getPosition())
+                        .put("SqlException: ")
+                        .put(e.getFlyweightMessage());
+                ce.setStackTrace(e.getStackTrace());
+                throw ce;
+            }
+            calculateRanges(reader, intervals);
+        }
     }
 
     protected TimestampFinder initTimestampFinder(int partitionIndex, long rowCount) {

@@ -48,6 +48,7 @@ public class IntervalFwdPartitionFrameCursor extends AbstractIntervalPartitionFr
 
     @Override
     public PartitionFrame next() {
+        ensureIntervalsCalculated();
         // order of logical operations is important
         // we are not calculating partition ranges when intervals are empty
         while (intervalsLo < intervalsHi && partitionLo < partitionHi) {

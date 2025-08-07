@@ -26,6 +26,7 @@ package io.questdb.griffin.engine.functions.lt;
 
 import io.questdb.cairo.CairoConfiguration;
 import io.questdb.cairo.ColumnType;
+import io.questdb.cairo.DataUnavailableException;
 import io.questdb.cairo.sql.Function;
 import io.questdb.cairo.sql.Record;
 import io.questdb.cairo.sql.RecordCursor;
@@ -36,6 +37,7 @@ import io.questdb.griffin.FunctionFactory;
 import io.questdb.griffin.PlanSink;
 import io.questdb.griffin.SqlException;
 import io.questdb.griffin.SqlExecutionContext;
+import io.questdb.griffin.SqlUtil;
 import io.questdb.griffin.engine.functions.BinaryFunction;
 import io.questdb.griffin.engine.functions.NegatableBooleanFunction;
 import io.questdb.griffin.model.IntervalUtils;
@@ -97,9 +99,10 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
         private final Function leftFunc;
         private final Function rightFunc;
         private final int rightPos;
-        private long epoch;
-        private boolean stateInherited = false;
-        private boolean stateShared = false;
+        private long epoch = Long.MAX_VALUE;
+        private SqlExecutionContext sqlExecutionContext;
+        private boolean stateInherited;
+        private boolean stateShared;
 
         public StrCursorFunc(RecordCursorFactory factory, Function leftFunc, Function rightFunc, int rightPos) {
             this.factory = factory;
@@ -110,6 +113,13 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
 
         @Override
         public boolean getBool(Record rec) {
+            if (epoch == Long.MAX_VALUE) {
+                try {
+                    initEpoch();
+                } catch (SqlException e) {
+                    throw SqlUtil.toCairoException(e);
+                }
+            }
             return Numbers.lessThan(
                     leftFunc.getTimestamp(rec),
                     epoch,
@@ -130,21 +140,16 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
         @Override
         public void init(SymbolTableSource symbolTableSource, SqlExecutionContext executionContext) throws SqlException {
             BinaryFunction.super.init(symbolTableSource, executionContext);
+            sqlExecutionContext = executionContext;
             if (stateInherited) {
                 return;
             }
-            this.stateShared = false;
-            try (RecordCursor cursor = factory.getCursor(executionContext)) {
-                if (cursor.hasNext()) {
-                    final CharSequence value = cursor.getRecord().getStrA(0);
-                    try {
-                        epoch = value != null ? IntervalUtils.parseFloorPartialTimestamp(value) : Numbers.LONG_NULL;
-                    } catch (NumericException e) {
-                        throw SqlException.$(rightPos, "the cursor selected invalid timestamp value: ").put(value);
-                    }
-                } else {
-                    epoch = Numbers.LONG_NULL;
-                }
+            stateShared = false;
+            epoch = Long.MAX_VALUE;
+            try {
+                initEpoch();
+            } catch (DataUnavailableException e) {
+                e.getEvent().close();
             }
         }
 
@@ -157,8 +162,12 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
         public void offerStateTo(Function that) {
             if (that instanceof StrCursorFunc) {
                 StrCursorFunc thatF = (StrCursorFunc) that;
-                thatF.epoch = epoch;
-                thatF.stateInherited = this.stateShared = true;
+                if (epoch != Long.MAX_VALUE) {
+                    thatF.epoch = epoch;
+                    thatF.stateInherited = this.stateShared = true;
+                } else {
+                    thatF.stateInherited = this.stateShared = false;
+                }
             }
             BinaryFunction.super.offerStateTo(that);
         }
@@ -179,15 +188,31 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
                 sink.val(" [state-shared]");
             }
         }
+
+        private void initEpoch() throws SqlException {
+            try (RecordCursor cursor = factory.getCursor(sqlExecutionContext)) {
+                if (cursor.hasNext()) {
+                    final CharSequence value = cursor.getRecord().getStrA(0);
+                    try {
+                        epoch = value != null ? IntervalUtils.parseFloorPartialTimestamp(value) : Numbers.LONG_NULL;
+                    } catch (NumericException e) {
+                        throw SqlException.$(rightPos, "the cursor selected invalid timestamp value: ").put(value);
+                    }
+                } else {
+                    epoch = Numbers.LONG_NULL;
+                }
+            }
+        }
     }
 
     private static class TimestampCursorFunc extends NegatableBooleanFunction implements BinaryFunction {
         private final RecordCursorFactory factory;
         private final Function leftFunc;
         private final Function rightFunc;
-        private long epoch;
-        private boolean stateInherited = false;
-        private boolean stateShared = false;
+        private long epoch = Long.MAX_VALUE;
+        private SqlExecutionContext sqlExecutionContext;
+        private boolean stateInherited;
+        private boolean stateShared;
 
         public TimestampCursorFunc(RecordCursorFactory factory, Function leftFunc, Function rightFunc) {
             this.factory = factory;
@@ -197,6 +222,13 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
 
         @Override
         public boolean getBool(Record rec) {
+            if (epoch == Long.MAX_VALUE) {
+                try {
+                    initEpoch();
+                } catch (SqlException e) {
+                    throw SqlUtil.toCairoException(e);
+                }
+            }
             return Numbers.lessThan(
                     leftFunc.getTimestamp(rec),
                     epoch,
@@ -217,16 +249,16 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
         @Override
         public void init(SymbolTableSource symbolTableSource, SqlExecutionContext executionContext) throws SqlException {
             BinaryFunction.super.init(symbolTableSource, executionContext);
+            sqlExecutionContext = executionContext;
             if (stateInherited) {
                 return;
             }
-            this.stateShared = false;
-            try (RecordCursor cursor = factory.getCursor(executionContext)) {
-                if (cursor.hasNext()) {
-                    epoch = cursor.getRecord().getTimestamp(0);
-                } else {
-                    epoch = Numbers.LONG_NULL;
-                }
+            stateShared = false;
+            epoch = Long.MAX_VALUE;
+            try {
+                initEpoch();
+            } catch (DataUnavailableException e) {
+                e.getEvent().close();
             }
         }
 
@@ -239,8 +271,12 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
         public void offerStateTo(Function that) {
             if (that instanceof TimestampCursorFunc) {
                 TimestampCursorFunc thatF = (TimestampCursorFunc) that;
-                thatF.epoch = epoch;
-                thatF.stateInherited = this.stateShared = true;
+                if (epoch != Long.MAX_VALUE) {
+                    thatF.epoch = epoch;
+                    thatF.stateInherited = this.stateShared = true;
+                } else {
+                    thatF.stateInherited = this.stateShared = false;
+                }
             }
             BinaryFunction.super.offerStateTo(that);
         }
@@ -261,6 +297,16 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
                 sink.val(" [state-shared]");
             }
         }
+
+        private void initEpoch() throws SqlException {
+            try (RecordCursor cursor = factory.getCursor(sqlExecutionContext)) {
+                if (cursor.hasNext()) {
+                    epoch = cursor.getRecord().getTimestamp(0);
+                } else {
+                    epoch = Numbers.LONG_NULL;
+                }
+            }
+        }
     }
 
     private static class VarcharCursorFunc extends NegatableBooleanFunction implements BinaryFunction {
@@ -268,9 +314,10 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
         private final Function leftFunc;
         private final Function rightFunc;
         private final int rightPos;
-        private long epoch;
-        private boolean stateInherited = false;
-        private boolean stateShared = false;
+        private long epoch = Long.MAX_VALUE;
+        private SqlExecutionContext sqlExecutionContext;
+        private boolean stateInherited;
+        private boolean stateShared;
 
         public VarcharCursorFunc(RecordCursorFactory factory, Function leftFunc, Function rightFunc, int rightPos) {
             this.factory = factory;
@@ -281,6 +328,13 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
 
         @Override
         public boolean getBool(Record rec) {
+            if (epoch == Long.MAX_VALUE) {
+                try {
+                    initEpoch();
+                } catch (SqlException e) {
+                    throw SqlUtil.toCairoException(e);
+                }
+            }
             return Numbers.lessThan(
                     leftFunc.getTimestamp(rec),
                     epoch,
@@ -301,21 +355,16 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
         @Override
         public void init(SymbolTableSource symbolTableSource, SqlExecutionContext executionContext) throws SqlException {
             BinaryFunction.super.init(symbolTableSource, executionContext);
+            sqlExecutionContext = executionContext;
             if (stateInherited) {
                 return;
             }
-            this.stateShared = false;
-            try (RecordCursor cursor = factory.getCursor(executionContext)) {
-                if (cursor.hasNext()) {
-                    final Utf8Sequence value = cursor.getRecord().getVarcharA(0);
-                    try {
-                        epoch = value != null ? IntervalUtils.parseFloorPartialTimestamp(value) : Numbers.LONG_NULL;
-                    } catch (NumericException e) {
-                        throw SqlException.$(rightPos, "the cursor selected invalid timestamp value: ").put(value);
-                    }
-                } else {
-                    epoch = Numbers.LONG_NULL;
-                }
+            stateShared = false;
+            epoch = Long.MAX_VALUE;
+            try {
+                initEpoch();
+            } catch (DataUnavailableException e) {
+                e.getEvent().close();
             }
         }
 
@@ -328,8 +377,12 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
         public void offerStateTo(Function that) {
             if (that instanceof VarcharCursorFunc) {
                 VarcharCursorFunc thatF = (VarcharCursorFunc) that;
-                thatF.epoch = epoch;
-                thatF.stateInherited = this.stateShared = true;
+                if (epoch != Long.MAX_VALUE) {
+                    thatF.epoch = epoch;
+                    thatF.stateInherited = this.stateShared = true;
+                } else {
+                    thatF.stateInherited = this.stateShared = false;
+                }
             }
             BinaryFunction.super.offerStateTo(that);
         }
@@ -348,6 +401,21 @@ public class LtTimestampCursorFunctionFactory implements FunctionFactory {
             sink.val(rightFunc);
             if (stateShared) {
                 sink.val(" [state-shared]");
+            }
+        }
+
+        private void initEpoch() throws SqlException {
+            try (RecordCursor cursor = factory.getCursor(sqlExecutionContext)) {
+                if (cursor.hasNext()) {
+                    final Utf8Sequence value = cursor.getRecord().getVarcharA(0);
+                    try {
+                        epoch = value != null ? IntervalUtils.parseFloorPartialTimestamp(value) : Numbers.LONG_NULL;
+                    } catch (NumericException e) {
+                        throw SqlException.$(rightPos, "the cursor selected invalid timestamp value: ").put(value);
+                    }
+                } else {
+                    epoch = Numbers.LONG_NULL;
+                }
             }
         }
     }
