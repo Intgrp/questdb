@@ -30,6 +30,7 @@ import io.questdb.cairo.sql.PartitionFrameCursor;
 import io.questdb.cairo.sql.StaticSymbolTable;
 import io.questdb.griffin.SqlException;
 import io.questdb.griffin.SqlExecutionContext;
+import io.questdb.griffin.SqlUtil;
 import io.questdb.griffin.engine.table.parquet.PartitionDecoder;
 import io.questdb.griffin.model.RuntimeIntrinsicIntervalModel;
 import io.questdb.std.LongList;
@@ -292,11 +293,7 @@ public abstract class AbstractIntervalPartitionFrameCursor implements PartitionF
             try {
                 intervals = intervalModel.calculateIntervals(sqlExecutionContext);
             } catch (SqlException e) {
-                CairoException ce = CairoException.nonCritical().position(e.getPosition())
-                        .put("SqlException: ")
-                        .put(e.getFlyweightMessage());
-                ce.setStackTrace(e.getStackTrace());
-                throw ce;
+                throw SqlUtil.toCairoException(e);
             }
             calculateRanges(reader, intervals);
         }

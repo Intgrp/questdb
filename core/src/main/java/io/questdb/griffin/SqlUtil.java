@@ -24,6 +24,7 @@
 
 package io.questdb.griffin;
 
+import io.questdb.cairo.CairoException;
 import io.questdb.cairo.ColumnType;
 import io.questdb.cairo.GeoHashes;
 import io.questdb.cairo.ImplicitCastException;
@@ -1056,6 +1057,13 @@ public class SqlUtil {
         } catch (NumericException e) {
             throw ImplicitCastException.inconvertibleValue(tupleIndex, value, sourceColumnType, targetColumnType);
         }
+    }
+
+    public static CairoException toCairoException(SqlException sqlExc) {
+        CairoException ce = CairoException.nonCritical().position(sqlExc.getPosition())
+                .put(sqlExc.getFlyweightMessage());
+        ce.setStackTrace(sqlExc.getStackTrace());
+        return ce;
     }
 
     public static short toPersistedTypeTag(@NotNull CharSequence tok, int tokPosition) throws SqlException {
