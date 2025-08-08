@@ -464,7 +464,7 @@ public final class MCPProcessor implements HttpPostPutProcessor, HttpRequestHand
                         if (str == null) {
                             response.putAscii("null");
                         } else {
-                            response.putAscii(escapeJson(str.toString()));
+                            response.escapeJsonStr(str);
                         }
                         break;
                     case io.questdb.cairo.ColumnType.INT:
@@ -512,7 +512,7 @@ public final class MCPProcessor implements HttpPostPutProcessor, HttpRequestHand
         response.putAscii(",\"error\":{\"code\":");
         response.put(code);
         response.putAscii(",\"message\":\"");
-        response.putAscii(escapeJson(message));
+        response.escapeJsonStr(message);
         response.putAscii("\"}}\n\n");
         response.sendChunk(true);
     }
@@ -526,14 +526,4 @@ public final class MCPProcessor implements HttpPostPutProcessor, HttpRequestHand
         response.putAscii(message);
         response.sendChunk(true);
     }
-
-    private String escapeJson(String str) {
-        if (str == null) return "";
-        return str.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
-    }
-
 }
