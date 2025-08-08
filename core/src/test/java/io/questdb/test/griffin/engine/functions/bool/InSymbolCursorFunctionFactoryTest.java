@@ -264,6 +264,18 @@ public class InSymbolCursorFunctionFactoryTest extends AbstractCairoTest {
     }
 
     @Test
+    public void testSymbolInEmptyResult() throws Exception {
+        assertQuery(
+                "column\nfalse\n",
+                "SELECT 'foo'::symbol IN (SELECT sym FROM tango);",
+                "CREATE TABLE tango (sym SYMBOL)",
+                null,
+                true,
+                true
+        );
+    }
+
+    @Test
     public void testSymbolInNullCursorInFilter() throws Exception {
         assertQuery(
                 "x\n",
