@@ -46,8 +46,8 @@ public class GtTimestampCursorFunctionFactoryTest extends AbstractCairoTest {
             assertSql(expected, "select * from x where ts > (select 1::timestamp from x where 1 <> 1)");
             assertSql(expected, "select * from x where ts > (select '11' from x where 1 <> 1)");
             assertSql(expected, "select * from x where ts > (select '11'::varchar from x where 1 <> 1)");
-            assertException("select * from x where ts > (select 'hello')", 28, "the cursor selected invalid timestamp value: hello");
-            assertException("select * from x where ts > (select 'hello'::varchar)", 28, "the cursor selected invalid timestamp value: hello");
+            assertException("select * from x where ts > (select 'hello')", 28, "nested query selected invalid timestamp value: hello");
+            assertException("select * from x where ts > (select 'hello'::varchar)", 28, "nested query selected invalid timestamp value: hello");
             assertException("select * from x where ts > (select 'hello'::varchar, 10 x)", 28, "select must provide exactly one column");
             assertException("select * from x where ts > (select 10 x)", 28, "cannot compare TIMESTAMP and INT");
         });

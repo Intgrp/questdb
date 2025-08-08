@@ -196,7 +196,7 @@ public class GtTimestampCursorFunctionFactory implements FunctionFactory {
                     try {
                         epoch = value != null ? IntervalUtils.parseFloorPartialTimestamp(value) : Numbers.LONG_NULL;
                     } catch (NumericException e) {
-                        throw SqlException.$(rightPos, "the cursor selected invalid timestamp value: ").put(value);
+                        throw SqlException.$(rightPos, "nested query selected invalid timestamp value: ").put(value);
                     }
                 } else {
                     epoch = Numbers.LONG_NULL;
@@ -412,7 +412,7 @@ public class GtTimestampCursorFunctionFactory implements FunctionFactory {
                     try {
                         epoch = value != null ? IntervalUtils.parseFloorPartialTimestamp(value) : Numbers.LONG_NULL;
                     } catch (NumericException e) {
-                        throw SqlException.$(rightPos, "the cursor selected invalid timestamp value: ").put(value);
+                        throw SqlException.$(rightPos, "nested query selected invalid timestamp value: ").put(value);
                     }
                 } else {
                     epoch = Numbers.LONG_NULL;
