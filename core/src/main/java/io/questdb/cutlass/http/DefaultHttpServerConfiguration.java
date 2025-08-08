@@ -32,6 +32,7 @@ import io.questdb.cairo.PartitionBy;
 import io.questdb.cairo.SecurityContext;
 import io.questdb.cutlass.http.processors.JsonQueryProcessorConfiguration;
 import io.questdb.cutlass.http.processors.LineHttpProcessorConfiguration;
+import io.questdb.cutlass.http.processors.MCPProcessorConfiguration;
 import io.questdb.cutlass.http.processors.StaticContentProcessorConfiguration;
 import io.questdb.cutlass.line.LineTcpTimestampAdapter;
 import io.questdb.network.DefaultIODispatcherConfiguration;
@@ -55,6 +56,7 @@ public class DefaultHttpServerConfiguration extends DefaultIODispatcherConfigura
     private final JsonQueryProcessorConfiguration jsonQueryProcessorConfiguration = new DefaultJsonQueryProcessorConfiguration() {
     };
     private final LineHttpProcessorConfiguration lineHttpProcessorConfiguration;
+    private final MCPProcessorConfiguration mcpProcessorConfiguration = new MCPProcessorConfiguration() {};
     private final StaticContentProcessorConfiguration staticContentProcessorConfiguration = new StaticContentProcessorConfiguration() {
         @Override
         public FilesFacade getFilesFacade() {
@@ -119,6 +121,11 @@ public class DefaultHttpServerConfiguration extends DefaultIODispatcherConfigura
     @Override
     public LineHttpProcessorConfiguration getLineHttpProcessorConfiguration() {
         return lineHttpProcessorConfiguration;
+    }
+
+    @Override
+    public MCPProcessorConfiguration getMCPProcessorConfiguration() {
+        return mcpProcessorConfiguration;
     }
 
     @Override

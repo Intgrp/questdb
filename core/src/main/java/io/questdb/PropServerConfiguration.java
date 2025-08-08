@@ -42,6 +42,7 @@ import io.questdb.cutlass.http.MimeTypesCache;
 import io.questdb.cutlass.http.WaitProcessorConfiguration;
 import io.questdb.cutlass.http.processors.JsonQueryProcessorConfiguration;
 import io.questdb.cutlass.http.processors.LineHttpProcessorConfiguration;
+import io.questdb.cutlass.http.processors.MCPProcessorConfiguration;
 import io.questdb.cutlass.http.processors.StaticContentProcessorConfiguration;
 import io.questdb.cutlass.json.JsonException;
 import io.questdb.cutlass.json.JsonLexer;
@@ -4436,6 +4437,11 @@ public class PropServerConfiguration implements ServerConfiguration {
         @Override
         public LineHttpProcessorConfiguration getLineHttpProcessorConfiguration() {
             return lineHttpProcessorConfiguration;
+        }
+
+        @Override
+        public MCPProcessorConfiguration getMCPProcessorConfiguration() {
+            return new MCPProcessorConfiguration() {};
         }
 
         @Override

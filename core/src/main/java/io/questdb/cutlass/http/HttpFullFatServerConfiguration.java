@@ -26,6 +26,7 @@ package io.questdb.cutlass.http;
 
 import io.questdb.cutlass.http.processors.JsonQueryProcessorConfiguration;
 import io.questdb.cutlass.http.processors.LineHttpProcessorConfiguration;
+import io.questdb.cutlass.http.processors.MCPProcessorConfiguration;
 import io.questdb.cutlass.http.processors.StaticContentProcessorConfiguration;
 import io.questdb.std.ConcurrentCacheConfiguration;
 import io.questdb.std.ObjList;
@@ -71,6 +72,10 @@ public interface HttpFullFatServerConfiguration extends HttpServerConfiguration 
         return new ObjList<>("/warnings");
     }
 
+    default ObjList<String> getContextPathMCP() {
+        return new ObjList<>("/mcp");
+    }
+
     default String getContextPathWebConsole() {
         return "";
     }
@@ -78,6 +83,8 @@ public interface HttpFullFatServerConfiguration extends HttpServerConfiguration 
     JsonQueryProcessorConfiguration getJsonQueryProcessorConfiguration();
 
     LineHttpProcessorConfiguration getLineHttpProcessorConfiguration();
+
+    MCPProcessorConfiguration getMCPProcessorConfiguration();
 
     String getPassword();
 

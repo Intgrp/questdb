@@ -28,6 +28,7 @@ import io.questdb.FactoryProvider;
 import io.questdb.Metrics;
 import io.questdb.cutlass.http.processors.JsonQueryProcessorConfiguration;
 import io.questdb.cutlass.http.processors.LineHttpProcessorConfiguration;
+import io.questdb.cutlass.http.processors.MCPProcessorConfiguration;
 import io.questdb.cutlass.http.processors.StaticContentProcessorConfiguration;
 import io.questdb.metrics.Counter;
 import io.questdb.metrics.LongGauge;
@@ -193,6 +194,11 @@ public class HttpServerConfigurationWrapper implements HttpFullFatServerConfigur
     @Override
     public LineHttpProcessorConfiguration getLineHttpProcessorConfiguration() {
         return getDelegate().getLineHttpProcessorConfiguration();
+    }
+
+    @Override
+    public MCPProcessorConfiguration getMCPProcessorConfiguration() {
+        return getDelegate().getMCPProcessorConfiguration();
     }
 
     @Override

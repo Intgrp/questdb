@@ -29,6 +29,8 @@ import io.questdb.cairo.CairoEngine;
 import io.questdb.cairo.sql.RecordCursorFactory;
 import io.questdb.cutlass.http.processors.LineHttpPingProcessor;
 import io.questdb.cutlass.http.processors.LineHttpProcessorConfiguration;
+import io.questdb.cutlass.http.processors.MCPProcessor;
+import io.questdb.cutlass.http.processors.MCPProcessorConfiguration;
 import io.questdb.cutlass.http.processors.SettingsProcessor;
 import io.questdb.cutlass.http.processors.StaticContentProcessorFactory;
 import io.questdb.cutlass.http.processors.TableStatusCheckProcessor;
@@ -260,6 +262,22 @@ public class HttpServer implements Closeable {
                 return new TableStatusCheckProcessor(cairoEngine, httpServerConfiguration.getJsonQueryProcessorConfiguration());
             }
         });
+
+        // Add MCP endpoint
+        MCPProcessorConfiguration mcpConfig = httpServerConfiguration.getMCPProcessorConfiguration();
+        if (mcpConfig != null && mcpConfig.isEnabled()) {
+            server.bind(new HttpRequestHandlerFactory() {
+                @Override
+                public ObjList<String> getUrls() {
+                    return httpServerConfiguration.getContextPathMCP();
+                }
+
+                @Override
+                public HttpRequestHandler newInstance() {
+                    return new MCPProcessor(mcpConfig, cairoEngine);
+                }
+            });
+        }
 
         server.bind(new StaticContentProcessorFactory(httpServerConfiguration));
     }
