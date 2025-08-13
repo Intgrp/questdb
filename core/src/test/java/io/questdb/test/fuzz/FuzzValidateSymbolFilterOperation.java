@@ -91,7 +91,12 @@ public class FuzzValidateSymbolFilterOperation implements FuzzTransactionOperati
             // rowCount of 1 is valid (symbol exists)
             // rowCount > 1 would indicate an index corruption issue
         } catch (Exception e) {
-            throw new AssertionError("Failed to validate index for symbol: " + symbol, e);
+            // we intentionally catch and swallow all exceptions!
+            // why? Fuzz tests use a failure injection and query compilation and execution can fail
+            // with scary errors, such as I/O errors etc. That's expected and does not indicate a bug.
+            // we are only interested in a correctness of a symbol lookup - so when a query executes
+            // successfully only then we validate its results. nothing else matters.
+            // Note: This won't catch AssertionError
         }
     }
 }
