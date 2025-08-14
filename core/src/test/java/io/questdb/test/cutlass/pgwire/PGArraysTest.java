@@ -623,6 +623,34 @@ public class PGArraysTest extends BasePGTest {
     }
 
     @Test
+    public void testInsertTwoDimensionalArrayBindingVars() throws Exception {
+        skipOnWalRun();
+
+        assertWithPgServer(CONN_AWARE_ALL, (connection, binary, mode, port) -> {
+            try (PreparedStatement stmt = connection.prepareStatement("create table x (al double[][])")) {
+                stmt.execute();
+            }
+
+            try (PreparedStatement stmt = connection.prepareStatement("insert into x values (?)")) {
+                Array arr = connection.createArrayOf("float8", new Double[][]{{1d, 2d, 3d}, {4d, 5d, 6d}});
+                stmt.setArray(1, arr);
+                stmt.execute();
+            }
+
+            try (PreparedStatement stmt = connection.prepareStatement("select * from x")) {
+                sink.clear();
+                try (ResultSet rs = stmt.executeQuery()) {
+                    assertResultSet("al[ARRAY]\n" +
+                                    "{{1.0,2.0,3.0},{4.0,5.0,6.0}}\n",
+                            sink,
+                            rs
+                    );
+                }
+            }
+        });
+    }
+
+    @Test
     public void testSendBufferOverflowNonVanilla() throws Exception {
         Assume.assumeTrue(walEnabled);
         int dimLen1 = 10 + bufferSizeRnd.nextInt(90);
