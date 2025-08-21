@@ -1,0 +1,36 @@
+# Dockerfile for running isolated tests
+# Using Eclipse Temurin JDK 17 on Ubuntu 22.04 for newer glibc
+FROM maven:3.9-eclipse-temurin-17
+
+# Install additional tools that might be needed
+RUN apt-get update && \
+    apt-get install -y git && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy Maven settings first to leverage Docker cache
+COPY pom.xml /workspace/
+COPY core/pom.xml /workspace/core/
+COPY benchmarks/pom.xml /workspace/benchmarks/
+COPY utils/pom.xml /workspace/utils/
+COPY examples/pom.xml /workspace/examples/
+COPY compat/pom.xml /workspace/compat/
+
+# Download dependencies (this layer will be cached if pom files don't change)
+RUN mvn dependency:go-offline -B || true
+
+# Copy the entire source tree
+COPY . /workspace/
+
+# Create directory for test results
+RUN mkdir -p /test-results
+
+# Set environment variables for test execution
+ENV MAVEN_OPTS="-Xmx4g"
+ENV TEST_RESULTS_DIR="/test-results"
+
+# Default command runs all tests
+CMD ["mvn", "test", "-Dmaven.test.failure.ignore=true"]
