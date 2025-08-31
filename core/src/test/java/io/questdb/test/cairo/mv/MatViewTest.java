@@ -6786,12 +6786,25 @@ public class MatViewTest extends AbstractCairoTest {
 
             execute(
                     "INSERT INTO historical_prices VALUES" +
-                            "('HP', 'NYSE', now(), 28.50, 100)," +
-                            "('HP', 'NYSE', now(), 28.55, 120)," +
-                            "('HP', 'NYSE', now(), 28.52, 80)"
+                            "('HP', 'NYSE', '2025-08-31T15:49:00.309937Z', 28.50, 100)," +
+                            "('HP', 'NYSE', '2025-08-31T15:49:00.309937Z', 28.55, 120)," +
+                            "('HP', 'NYSE', '2025-08-31T15:49:00.309937Z', 28.52, 80)"
             );
 
             drainQueues();
+
+            assertSql(
+                    "symbol\tmarket\ttimestamp\tprice\tvolume\n" +
+                            "HP\tNYSE\t2025-08-31T15:49:00.309937Z\t28.5\t100\n" +
+                            "HP\tNYSE\t2025-08-31T15:49:00.309937Z\t28.55\t120\n" +
+                            "HP\tNYSE\t2025-08-31T15:49:00.309937Z\t28.52\t80\n",
+                    "select * from historical_prices"
+            );
+
+            assertSql(
+                    "-",
+                    "SELECT timestamp, symbol, market,   first(price) AS open, max(price) AS high,   min(price) AS low, last(price) AS close,   sum(volume) AS volume  FROM historical_prices  SAMPLE BY 1w"
+            );
 
             // Assert that materialized view status is valid
             assertSql(
