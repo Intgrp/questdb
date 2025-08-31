@@ -6759,4 +6759,53 @@ public class MatViewTest extends AbstractCairoTest {
             return this;
         }
     }
+
+    @Test
+    public void testWeeklySampleTimestampOutOfRangeIssue6089() throws Exception {
+        assertMemoryLeak(() -> {
+            execute(
+                    "CREATE TABLE historical_prices (" +
+                            "  symbol SYMBOL," +
+                            "  market SYMBOL," +
+                            "  timestamp TIMESTAMP," +
+                            "  price DOUBLE," +
+                            "  volume LONG" +
+                            ") timestamp(timestamp) PARTITION BY DAY WAL"
+            );
+
+            execute(
+                    "CREATE MATERIALIZED VIEW 'historical_prices_1week' AS (" +
+                            "  SELECT timestamp, symbol, market, " +
+                            "  first(price) AS open, max(price) AS high, " +
+                            "  min(price) AS low, last(price) AS close, " +
+                            "  sum(volume) AS volume" +
+                            "  FROM historical_prices" +
+                            "  SAMPLE BY 1w" +
+                            ") PARTITION BY MONTH TTL 5 YEARS"
+            );
+
+            execute(
+                    "INSERT INTO historical_prices VALUES" +
+                            "('HP', 'NYSE', now(), 28.50, 100)," +
+                            "('HP', 'NYSE', now(), 28.55, 120)," +
+                            "('HP', 'NYSE', now(), 28.52, 80)"
+            );
+
+            drainQueues();
+
+            // Assert that materialized view status is valid
+            assertSql(
+                    "view_name\tview_status\n" +
+                            "historical_prices_1week\tvalid\n",
+                    "select view_name, view_status from materialized_views where view_name = 'historical_prices_1week'"
+            );
+
+            // Assert that view returns aggregated data
+            assertQueryNoLeakCheck(
+                    "timestamp\tsymbol\tmarket\topen\thigh\tlow\tclose\tvolume\n" +
+                            "2025-08-25T00:00:00.000000Z\tHP\tNYSE\t28.5\t28.55\t28.5\t28.52\t300\n",
+                    "historical_prices_1week ORDER BY timestamp"
+            );
+        });
+    }
 }
