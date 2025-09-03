@@ -38,7 +38,7 @@ public class DecimalAbsTest {
 
         // For the purpose of this test, we're relying on the Decimal256 loader/storer to pass around the decimal value
         // One can change the layout of the type on memory by modifying type just below
-        DecimalType type = DecimalType.DECIMAL256;
+        DecimalType type = DecimalType.DECIMAL32;
 
         AbsTester tester = generateInstance(asm, type);
 

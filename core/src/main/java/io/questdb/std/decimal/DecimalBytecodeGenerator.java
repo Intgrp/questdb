@@ -196,9 +196,9 @@ public class DecimalBytecodeGenerator {
     public static void storeDecimal256Null(BytecodeAssemblerStack asm, int parameterIndex, int poolIndex) {
         asm.aload(parameterIndex);
         asm.ldc2_w(poolIndex + CONSTANT_LONG_MIN_VALUE_OFFSET);
-        asm.ldc2_w(poolIndex + CONSTANT_LONG_MINUS_ONE_OFFSET);
-        asm.ldc2_w(poolIndex + CONSTANT_LONG_MINUS_ONE_OFFSET);
-        asm.ldc2_w(poolIndex + CONSTANT_LONG_MINUS_ONE_OFFSET);
+        asm.lconst_0();
+        asm.lconst_0();
+        asm.lconst_0();
         asm.iconst(0);
         asm.invokeVirtual(poolIndex + CONSTANT_DECIMAL256_OF_OFFSET, 9, 0);
     }
@@ -579,7 +579,7 @@ public class DecimalBytecodeGenerator {
         asm.ldc2_w(poolIndex + CONSTANT_LONG_MIN_VALUE_OFFSET);
         asm.lcmp(); // If both value are equal, 0 is pushed on the stack.
         asm.lload(localIndex + 2);
-        asm.ldc2_w(poolIndex + CONSTANT_LONG_MINUS_ONE_OFFSET);
+        asm.lconst_0();
         asm.lcmp();
         asm.ior();
         return asm.ifne();
@@ -592,15 +592,15 @@ public class DecimalBytecodeGenerator {
         asm.ldc2_w(poolIndex + CONSTANT_LONG_MIN_VALUE_OFFSET);
         asm.lcmp(); // If both value are equal, 0 is pushed on the stack.
         asm.lload(localIndex + 2);
-        asm.ldc2_w(poolIndex + CONSTANT_LONG_MINUS_ONE_OFFSET);
+        asm.lconst_0();
         asm.lcmp();
         asm.ior();
         asm.lload(localIndex + 4);
-        asm.ldc2_w(poolIndex + CONSTANT_LONG_MINUS_ONE_OFFSET);
+        asm.lconst_0();
         asm.lcmp();
         asm.ior();
         asm.lload(localIndex + 6);
-        asm.ldc2_w(poolIndex + CONSTANT_LONG_MINUS_ONE_OFFSET);
+        asm.lconst_0();
         asm.lcmp();
         asm.ior();
         return asm.ifne();
