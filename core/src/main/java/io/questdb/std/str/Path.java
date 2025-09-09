@@ -150,7 +150,7 @@ public class Path implements Utf8Sink, DirectUtf8Sequence, Closeable {
     @Override
     public void close() {
         if (headPtr != 0L) {
-            if (ParanoiaState.THREAD_LOCAL_PATH_PARANOIA_MODE && stackTrace != null) {
+            if (ParanoiaState.PATH_THREAD_LOCAL_PARANOIA_MODE && stackTrace != null) {
                 System.err.print("Closing path: ");
                 stackTrace.printStackTrace(System.err);
             }
@@ -462,8 +462,7 @@ public class Path implements Utf8Sink, DirectUtf8Sequence, Closeable {
     }
 
     private static Path newTLPath() {
-        if (ParanoiaState.THREAD_LOCAL_PATH_PARANOIA_MODE) {
-            // Uncomment this line if you need to trace thread local create callstack
+        if (ParanoiaState.PATH_THREAD_LOCAL_PARANOIA_MODE) {
             Exception ex = new Exception("ThreadLocal Path " + threadLocalInstanceCounter.incrementAndGet());
             ex.printStackTrace(System.err);
             return new Path(255, MemoryTag.NATIVE_PATH_THREAD_LOCAL, ex);
